@@ -36,7 +36,6 @@ jobs:
           GITHUB_ACTOR: ${{ github.actor }}
           GITHUB_SERVER_URL: ${{ github.server_url }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          GITHUB_RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
           python3 - <<'PY'
@@ -65,8 +64,7 @@ jobs:
           server_url = env("GITHUB_SERVER_URL", "")
           repository = env("GITHUB_REPOSITORY", "")
           repository_name = repository.rsplit("/", 1)[-1] if repository else "unknown"
-          run_id = env("GITHUB_RUN_ID", "")
-          run_url = f"{server_url}/{repository}/actions/runs/{run_id}"
+          run_url = f"{server_url}/{repository}/actions"
 
           if notify_status == "success":
               message = (
