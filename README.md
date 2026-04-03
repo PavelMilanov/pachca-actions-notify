@@ -13,7 +13,7 @@ Public reusable GitHub Actions workflow for Pachca notifications.
 ## Usage
 ```yaml
 notify_success:
-  uses: <ORG>/pachca-notify-workflow/.github/workflows/notify.yaml@v1
+  uses: PavelMilanov/pachca-actions-notify/.github/workflows/notify.yaml@v1
   with:
     status: success
   secrets:
@@ -22,7 +22,7 @@ notify_success:
 
 ```yaml
 notify_failure:
-  uses: <ORG>/pachca-notify-workflow/.github/workflows/notify.yaml@v1
+  uses: PavelMilanov/pachca-actions-notify/.github/workflows/notify.yaml@v1
   with:
     status: failure
   secrets:
