@@ -1,0 +1,112 @@
+name: notify
+
+on:
+  workflow_call:
+    inputs:
+      status:
+        required: true
+        type: string
+    secrets:
+      PACHCA_WEBHOOK_URL:
+        required: true
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Validate status
+        run: |
+          set -euo pipefail
+          case "${{ inputs.status }}" in
+            success|failure) ;;
+            *)
+              echo "Invalid status: '${{ inputs.status }}'. Allowed values: success|failure" >&2
+              exit 1
+              ;;
+          esac
+
+      - name: Send Pachca notification
+        env:
+          PACHCA_WEBHOOK_URL: ${{ secrets.PACHCA_WEBHOOK_URL }}
+          NOTIFY_STATUS: ${{ inputs.status }}
+          GITHUB_SHA: ${{ github.sha }}
+          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_REF: ${{ github.ref }}
+          GITHUB_ACTOR: ${{ github.actor }}
+          GITHUB_SERVER_URL: ${{ github.server_url }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          import os
+          import sys
+          import urllib.error
+          import urllib.request
+
+          def env(name: str, default: str = "") -> str:
+              return os.getenv(name, default)
+
+          webhook_url = env("PACHCA_WEBHOOK_URL")
+          if not webhook_url:
+              print("PACHCA_WEBHOOK_URL is empty", file=sys.stderr)
+              raise SystemExit(1)
+
+          notify_status = env("NOTIFY_STATUS", "failure").lower()
+          branch = env("GITHUB_REF_NAME", "unknown")
+          github_ref = env("GITHUB_REF")
+          if branch == "unknown" and github_ref:
+              branch = github_ref.rsplit("/", 1)[-1]
+
+          sha_short = env("GITHUB_SHA", "unknown")[:7] or "unknown"
+          actor = env("GITHUB_ACTOR", "unknown")
+          server_url = env("GITHUB_SERVER_URL", "")
+          repository = env("GITHUB_REPOSITORY", "")
+          repository_name = repository.rsplit("/", 1)[-1] if repository else "unknown"
+          run_id = env("GITHUB_RUN_ID", "")
+          run_url = f"{server_url}/{repository}/actions/runs/{run_id}"
+
+          if notify_status == "success":
+              message = (
+                  f"✅ успешный деплой {repository_name}\n\n"
+                  f"Репозиторий: {repository}\n"
+                  f"Ветка: {branch}\n"
+                  f"Коммит: {sha_short}\n"
+                  f"Автор: {actor}\n"
+                  f"Подробнее: [посмотреть action]({run_url})"
+              )
+          else:
+              message = (
+                  "❌ ошибка при деплое\n\n"
+                  f"Репозиторий: {repository}\n"
+                  f"Ветка: {branch}\n"
+                  f"Коммит: {sha_short}\n"
+                  f"Автор: {actor}\n"
+                  f"Подробнее: [посмотреть action]({run_url})"
+              )
+
+          payload = {"message": message}
+          data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+          request = urllib.request.Request(
+              webhook_url,
+              data=data,
+              headers={"Content-Type": "application/json"},
+              method="POST",
+          )
+
+          try:
+              with urllib.request.urlopen(request, timeout=20) as response:
+                  status = response.getcode()
+          except urllib.error.HTTPError as err:
+              print(f"Webhook request failed: HTTP {err.code}", file=sys.stderr)
+              raise SystemExit(1)
+          except urllib.error.URLError as err:
+              print(f"Webhook request failed: {err.reason}", file=sys.stderr)
+              raise SystemExit(1)
+
+          if status >= 400:
+              print(f"Webhook request failed: HTTP {status}", file=sys.stderr)
+              raise SystemExit(1)
+          PY
